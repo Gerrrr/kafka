@@ -1129,8 +1129,12 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         final StreamPartitioner<KO, SubscriptionWrapper<K>> subscriptionSinkPartitioner =
             tableJoinedInternal.otherPartitioner() == null
                 ? null
-                : (topic, key, val, numPartitions) ->
-                    tableJoinedInternal.otherPartitioner().partition(topic, key, null, numPartitions);
+                : (topic, key, val, numPartitions) -> {
+                    final Integer p = tableJoinedInternal.otherPartitioner().partition(topic, key, null, numPartitions);
+                    LOG.trace("[FK] subscriptionSinkPartitioner forwarded key={} from topic={} to {}",
+                        key, topic, p);
+                    return p;
+                };
 
         final StreamSinkNode<KO, SubscriptionWrapper<K>> subscriptionSink = new StreamSinkNode<>(
             renamed.suffixWithOrElseGet("-subscription-registration-sink", builder, SINK_NAME),
@@ -1205,8 +1209,12 @@ public class KTableImpl<K, S, V> extends AbstractStream<K, V> implements KTable<
         final StreamPartitioner<K, SubscriptionResponseWrapper<VO>> foreignResponseSinkPartitioner =
             tableJoinedInternal.partitioner() == null
                 ? null
-                : (topic, key, val, numPartitions) ->
-                    tableJoinedInternal.partitioner().partition(topic, key, null, numPartitions);
+                : (topic, key, val, numPartitions) -> {
+                    final Integer p = tableJoinedInternal.partitioner().partition(topic, key, null, numPartitions);
+                    LOG.trace("[FK] foreignResponseSinkPartitioner forwarded key={} from topic={} to {}",
+                        key, topic, p);
+                    return p;
+                };
 
         final StreamSinkNode<K, SubscriptionResponseWrapper<VO>> foreignResponseSink =
             new StreamSinkNode<>(

@@ -25,6 +25,8 @@ import org.apache.kafka.streams.processor.To;
 import org.apache.kafka.streams.state.ValueAndTimestamp;
 
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Receives {@code SubscriptionWrapper<K>} events and processes them according to their Instruction.
@@ -38,7 +40,7 @@ import java.util.Objects;
 @SuppressWarnings("deprecation") // Old PAPI. Needs to be migrated.
 public class SubscriptionJoinForeignProcessorSupplier<K, KO, VO>
     implements org.apache.kafka.streams.processor.ProcessorSupplier<CombinedKey<KO, K>, Change<ValueAndTimestamp<SubscriptionWrapper<K>>>> {
-
+    private static final Logger LOG = LoggerFactory.getLogger(SubscriptionJoinForeignProcessorSupplier.class);
     private final KTableValueGetterSupplier<KO, VO> foreignValueGetterSupplier;
 
     public SubscriptionJoinForeignProcessorSupplier(final KTableValueGetterSupplier<KO, VO> foreignValueGetterSupplier) {
@@ -66,7 +68,8 @@ public class SubscriptionJoinForeignProcessorSupplier<K, KO, VO>
                 final ValueAndTimestamp<SubscriptionWrapper<K>> valueAndTimestamp = change.newValue;
                 Objects.requireNonNull(valueAndTimestamp, "This processor should never see a null newValue.");
                 final SubscriptionWrapper<K> value = valueAndTimestamp.value();
-
+                LOG.trace("[FK] process instance={} combinedKey={} change={}",
+                    System.identityHashCode(this), combinedKey, change);
                 if (value.getVersion() != SubscriptionWrapper.CURRENT_VERSION) {
                     //Guard against modifications to SubscriptionWrapper. Need to ensure that there is compatibility
                     //with previous versions to enable rolling upgrades. Must develop a strategy for upgrading
@@ -80,13 +83,18 @@ public class SubscriptionJoinForeignProcessorSupplier<K, KO, VO>
                     foreignValueAndTime == null ?
                         valueAndTimestamp.timestamp() :
                         Math.max(valueAndTimestamp.timestamp(), foreignValueAndTime.timestamp());
+                LOG.trace("[FK] foreignValues.get({})={} resultTS={}",
+                    combinedKey.getForeignKey(), foreignValueAndTime, resultTimestamp);
 
+                final To to = To.all().withTimestamp(resultTimestamp);
                 switch (value.getInstruction()) {
                     case DELETE_KEY_AND_PROPAGATE:
+                        LOG.trace("forward key={} hash={} fkVal={} to={}",
+                            combinedKey.getPrimaryKey(), value.getHash(), null, to);
                         context().forward(
                             combinedKey.getPrimaryKey(),
                             new SubscriptionResponseWrapper<VO>(value.getHash(), null),
-                            To.all().withTimestamp(resultTimestamp)
+                            to
                         );
                         break;
                     case PROPAGATE_NULL_IF_NO_FK_VAL_AVAILABLE:
@@ -94,19 +102,22 @@ public class SubscriptionJoinForeignProcessorSupplier<K, KO, VO>
                         //changed and there is no match for it. We must propagate the (key, null) to ensure that the
                         //downstream consumers are alerted to this fact.
                         final VO valueToSend = foreignValueAndTime == null ? null : foreignValueAndTime.value();
-
+                        LOG.trace("forward key={} hash={} fkVal={} to={}",
+                            combinedKey.getPrimaryKey(), value.getHash(), valueToSend, to);
                         context().forward(
                             combinedKey.getPrimaryKey(),
                             new SubscriptionResponseWrapper<>(value.getHash(), valueToSend),
-                            To.all().withTimestamp(resultTimestamp)
+                            to
                         );
                         break;
                     case PROPAGATE_ONLY_IF_FK_VAL_AVAILABLE:
                         if (foreignValueAndTime != null) {
+                            LOG.trace("forward key={} hash={} fkVal={} to={}",
+                                combinedKey.getPrimaryKey(), value.getHash(), foreignValueAndTime.value(), to);
                             context().forward(
                                 combinedKey.getPrimaryKey(),
                                 new SubscriptionResponseWrapper<>(value.getHash(), foreignValueAndTime.value()),
-                                To.all().withTimestamp(resultTimestamp)
+                                to
                             );
                         }
                         break;

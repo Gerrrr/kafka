@@ -72,6 +72,7 @@ public class ForeignJoinSubscriptionProcessorSupplier<K, KO, VO> implements org.
         public void process(final KO key, final Change<VO> value) {
             // if the key is null, we do not need proceed aggregating
             // the record with the table
+            LOG.trace("[FK] process instance={} key={} value={}", System.identityHashCode(this), key, value);
             if (key == null) {
                 LOG.warn(
                     "Skipping record due to null key. value=[{}] topic=[{}] partition=[{}] offset=[{}]",
@@ -82,6 +83,7 @@ public class ForeignJoinSubscriptionProcessorSupplier<K, KO, VO> implements org.
             }
 
             final Bytes prefixBytes = keySchema.prefixBytes(key);
+            LOG.trace("[FK] prefixBytes for {} = {}. Going to prefixScan now", key, prefixBytes);
 
             //Perform the prefixScan and propagate the results
             try (final KeyValueIterator<Bytes, ValueAndTimestamp<SubscriptionWrapper<K>>> prefixScanResults =
@@ -89,9 +91,13 @@ public class ForeignJoinSubscriptionProcessorSupplier<K, KO, VO> implements org.
 
                 while (prefixScanResults.hasNext()) {
                     final KeyValue<Bytes, ValueAndTimestamp<SubscriptionWrapper<K>>> next = prefixScanResults.next();
+                    final boolean prefixEquals = prefixEquals(next.key.get(), prefixBytes.get());
+                    LOG.trace("[FK] prefixScan({}) = {} prefixEquals? {}", prefixBytes, next, prefixEquals);
                     // have to check the prefix because the range end is inclusive :(
-                    if (prefixEquals(next.key.get(), prefixBytes.get())) {
+                    if (prefixEquals) {
                         final CombinedKey<KO, K> combinedKey = keySchema.fromBytes(next.key);
+                        LOG.trace("[FK] forwarding pk={} hash={} newValue={}",
+                            combinedKey.getPrimaryKey(), next.value.value().getHash(), value.newValue);
                         context().forward(
                             combinedKey.getPrimaryKey(),
                             new SubscriptionResponseWrapper<>(next.value.value().getHash(), value.newValue)

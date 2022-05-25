@@ -17,6 +17,7 @@
 
 package org.apache.kafka.streams.kstream.internals.foreignkeyjoin;
 
+import java.util.Arrays;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.streams.kstream.ValueJoiner;
@@ -26,6 +27,8 @@ import org.apache.kafka.streams.state.ValueAndTimestamp;
 import org.apache.kafka.streams.state.internals.Murmur3;
 
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Receives {@code SubscriptionResponseWrapper<VO>} events and filters out events which do not match the current hash
@@ -39,6 +42,7 @@ import java.util.function.Supplier;
  */
 @SuppressWarnings("deprecation") // Old PAPI. Needs to be migrated.
 public class SubscriptionResolverJoinProcessorSupplier<K, V, VO, VR> implements org.apache.kafka.streams.processor.ProcessorSupplier<K, SubscriptionResponseWrapper<VO>> {
+    private static final Logger LOG = LoggerFactory.getLogger(SubscriptionResolverJoinProcessorSupplier.class);
     private final KTableValueGetterSupplier<K, V> valueGetterSupplier;
     private final Serializer<V> constructionTimeValueSerializer;
     private final Supplier<String> valueHashSerdePseudoTopicSupplier;
@@ -79,6 +83,8 @@ public class SubscriptionResolverJoinProcessorSupplier<K, V, VO, VR> implements 
 
             @Override
             public void process(final K key, final SubscriptionResponseWrapper<VO> value) {
+                LOG.trace("[FK] process instance={} key={} value={}",
+                    System.identityHashCode(this), key, value);
                 if (value.getVersion() != SubscriptionResponseWrapper.CURRENT_VERSION) {
                     //Guard against modifications to SubscriptionResponseWrapper. Need to ensure that there is
                     //compatibility with previous versions to enable rolling upgrades. Must develop a strategy for
@@ -86,15 +92,19 @@ public class SubscriptionResolverJoinProcessorSupplier<K, V, VO, VR> implements 
                     throw new UnsupportedVersionException("SubscriptionResponseWrapper is of an incompatible version.");
                 }
                 final ValueAndTimestamp<V> currentValueWithTimestamp = valueGetter.get(key);
+                LOG.trace("[FK] valueGetter.get({})={}", key, currentValueWithTimestamp);
 
                 final long[] currentHash = currentValueWithTimestamp == null ?
                     null :
                     Murmur3.hash128(runtimeValueSerializer.serialize(valueHashSerdePseudoTopic, currentValueWithTimestamp.value()));
 
                 final long[] messageHash = value.getOriginalValueHash();
+                final boolean equals = Arrays.equals(messageHash, currentHash);
+                LOG.trace("[FK] key={} value={} messageHash={} currentHash={} hashes equal? {}",
+                    key, value, messageHash, currentHash, equals);
 
                 //If this value doesn't match the current value from the original table, it is stale and should be discarded.
-                if (java.util.Arrays.equals(messageHash, currentHash)) {
+                if (equals) {
                     final VR result;
 
                     if (value.getForeignValue() == null && (!leftJoin || currentValueWithTimestamp == null)) {
@@ -102,6 +112,7 @@ public class SubscriptionResolverJoinProcessorSupplier<K, V, VO, VR> implements 
                     } else {
                         result = joiner.apply(currentValueWithTimestamp == null ? null : currentValueWithTimestamp.value(), value.getForeignValue());
                     }
+                    LOG.trace("[FK] forwarding key={} result={}", key, result);
                     context().forward(key, result);
                 }
             }

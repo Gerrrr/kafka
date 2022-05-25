@@ -97,6 +97,7 @@ public class ForeignJoinSubscriptionSendProcessorSupplier<K, KO, V> implements o
             final long[] currentHash = change.newValue == null ?
                 null :
                 Murmur3.hash128(valueSerializer.serialize(valueSerdeTopic, change.newValue));
+            LOG.trace("[FK] process instance={} key={} change={} currentHash={}", System.identityHashCode(this), key, change, currentHash);
 
             if (change.oldValue != null) {
                 final KO oldForeignKey = foreignKeyExtractor.apply(change.oldValue);
@@ -123,17 +124,26 @@ public class ForeignJoinSubscriptionSendProcessorSupplier<K, KO, V> implements o
                         foreignKeySerializer.serialize(foreignKeySerdeTopic, oldForeignKey);
                     final byte[] serialNewForeignKey =
                         foreignKeySerializer.serialize(foreignKeySerdeTopic, newForeignKey);
-                    if (!Arrays.equals(serialNewForeignKey, serialOldForeignKey)) {
+                    final boolean equals = Arrays.equals(serialNewForeignKey, serialOldForeignKey);
+                    LOG.trace("[FK] serialOldForeignKey={} serialNewForeignKey={} equals? {}",
+                        Arrays.toString(serialOldForeignKey), Arrays.toString(serialNewForeignKey), equals);
+                    if (!equals) {
                         //Different Foreign Key - delete the old key value and propagate the new one.
                         //Delete it from the oldKey's state store
+                        LOG.trace("[FK] forwarding oldFK={} hash={} key={} instruction=DELETE_KEY_NO_PROPAGATE",
+                            oldForeignKey, currentHash, key);
                         context().forward(oldForeignKey, new SubscriptionWrapper<>(currentHash, DELETE_KEY_NO_PROPAGATE, key));
                         //Add to the newKey's state store. Additionally, propagate null if no FK is found there,
                         //since we must "unset" any output set by the previous FK-join. This is true for both INNER
                         //and LEFT join.
                     }
+                    LOG.trace("[FK] forwarding newFK={}, hash={} key={} instruction=PROPAGATE_NULL_IF_NO_FK_VAL_AVAILABLE ",
+                        newForeignKey, currentHash, key);
                     context().forward(newForeignKey, new SubscriptionWrapper<>(currentHash, PROPAGATE_NULL_IF_NO_FK_VAL_AVAILABLE, key));
                 } else {
                     //A simple propagatable delete. Delete from the state store and propagate the delete onwards.
+                    LOG.trace("[FK] forwarding oldFK={}, hash={} key={} instruction=DELETE_KEY_AND_PROPAGATE",
+                        oldForeignKey, currentHash, key);
                     context().forward(oldForeignKey, new SubscriptionWrapper<>(currentHash, DELETE_KEY_AND_PROPAGATE, key));
                 }
             } else if (change.newValue != null) {
@@ -156,6 +166,8 @@ public class ForeignJoinSubscriptionSendProcessorSupplier<K, KO, V> implements o
                     );
                     droppedRecordsSensor.record();
                 } else {
+                    LOG.trace("[FK] forwarding newFK={} hash={} key={} instruction={}",
+                        newForeignKey, currentHash, key, instruction);
                     context().forward(newForeignKey, new SubscriptionWrapper<>(currentHash, instruction, key));
                 }
             }

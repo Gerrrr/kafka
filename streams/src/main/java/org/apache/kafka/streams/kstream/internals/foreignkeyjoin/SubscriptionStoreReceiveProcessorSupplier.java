@@ -71,6 +71,7 @@ public class SubscriptionStoreReceiveProcessorSupplier<K, KO>
 
             @Override
             public void process(final KO key, final SubscriptionWrapper<K> value) {
+                LOG.trace("[FK] process instance={} key={} value={}", System.identityHashCode(this), key, value);
                 if (key == null) {
                     LOG.warn(
                         "Skipping record due to null foreign key. value=[{}] topic=[{}] partition=[{}] offset=[{}]",
@@ -90,22 +91,26 @@ public class SubscriptionStoreReceiveProcessorSupplier<K, KO>
 
                 final ValueAndTimestamp<SubscriptionWrapper<K>> newValue = ValueAndTimestamp.make(value, context().timestamp());
                 final ValueAndTimestamp<SubscriptionWrapper<K>> oldValue = store.get(subscriptionKey);
+                LOG.trace("[FK] key={} subscriptionKey={} newValue={} oldValue={}",
+                    key, subscriptionKey, newValue, oldValue);
 
                 //This store is used by the prefix scanner in ForeignJoinSubscriptionProcessorSupplier
                 if (value.getInstruction().equals(SubscriptionWrapper.Instruction.DELETE_KEY_AND_PROPAGATE) ||
                     value.getInstruction().equals(SubscriptionWrapper.Instruction.DELETE_KEY_NO_PROPAGATE)) {
+                    LOG.trace("[FK] Delete subscriptionKey={} from store={}", subscriptionKey, store);
                     store.delete(subscriptionKey);
                 } else {
+                    LOG.trace("[FK] Put subscriptionKey={} value={} to store={}",
+                        subscriptionKey, value, store);
                     store.put(subscriptionKey, newValue);
                 }
                 final Change<ValueAndTimestamp<SubscriptionWrapper<K>>> change = new Change<>(newValue, oldValue);
                 // note: key is non-nullable
                 // note: newValue is non-nullable
-                context().forward(
-                    new CombinedKey<>(key, value.getPrimaryKey()),
-                    change,
-                    To.all().withTimestamp(newValue.timestamp())
-                );
+                final CombinedKey<KO, K> key1 = new CombinedKey<>(key, value.getPrimaryKey());
+                final To to = To.all().withTimestamp(newValue.timestamp());
+                LOG.trace("[FK] forward combinedKey={} change={} to={}", key1, change, to);
+                context().forward(key1, change, to);
             }
         };
     }
