@@ -31,6 +31,18 @@ import java.util.function.Supplier;
 public interface Time {
 
     Time SYSTEM = new SystemTime();
+    Time CACHED_MONOTONIC = new CachedMonotonicTime(SYSTEM).startTimeTracking();
+
+    static Time getTime() {
+        final String timeSource = System.getProperty("kafka.timesource");
+        switch (timeSource) {
+            case "system":
+                return SYSTEM;
+            case "monotonic":
+            default:
+                return CACHED_MONOTONIC;
+        }
+    }
 
     /**
      * Returns the current time in milliseconds.

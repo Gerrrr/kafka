@@ -16,7 +16,11 @@
  */
 package org.apache.kafka.streams.processor.internals;
 
-import org.apache.kafka.common.utils.SystemTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.streams.errors.StreamsException;
 import org.apache.kafka.streams.processor.Punctuator;
@@ -25,12 +29,6 @@ import org.apache.kafka.streams.processor.api.FixedKeyProcessorContext;
 import org.apache.kafka.streams.processor.api.InternalFixedKeyRecordFactory;
 import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.Record;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 public class ProcessorNode<KIn, VIn, KOut, VOut> {
 
@@ -63,7 +61,7 @@ public class ProcessorNode<KIn, VIn, KOut, VOut> {
         this.children = new ArrayList<>();
         this.childByName = new HashMap<>();
         this.stateStores = stateStores;
-        this.time = new SystemTime();
+        this.time = Time.CACHED_MONOTONIC;
     }
 
     public ProcessorNode(final String name,
@@ -76,7 +74,7 @@ public class ProcessorNode<KIn, VIn, KOut, VOut> {
         this.children = new ArrayList<>();
         this.childByName = new HashMap<>();
         this.stateStores = stateStores;
-        this.time = new SystemTime();
+        this.time = Time.getTime();
     }
 
     public final String name() {

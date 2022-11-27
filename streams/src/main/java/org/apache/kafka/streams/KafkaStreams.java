@@ -862,7 +862,7 @@ public class KafkaStreams implements AutoCloseable {
     protected KafkaStreams(final TopologyMetadata topologyMetadata,
                            final StreamsConfig applicationConfigs,
                            final KafkaClientSupplier clientSupplier) throws StreamsException {
-        this(topologyMetadata, applicationConfigs, clientSupplier, Time.SYSTEM);
+        this(topologyMetadata, applicationConfigs, clientSupplier, Time.getTime());
     }
 
     private KafkaStreams(final TopologyMetadata topologyMetadata,
