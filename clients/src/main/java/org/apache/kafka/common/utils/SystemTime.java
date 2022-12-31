@@ -40,21 +40,4 @@ public class SystemTime implements Time {
     public void sleep(long ms) {
         Utils.sleep(ms);
     }
-
-    @Override
-    public void waitObject(Object obj, Supplier<Boolean> condition, long deadlineMs) throws InterruptedException {
-        synchronized (obj) {
-            while (true) {
-                if (condition.get())
-                    return;
-
-                long currentTimeMs = milliseconds();
-                if (currentTimeMs >= deadlineMs)
-                    throw new TimeoutException("Condition not satisfied before deadline");
-
-                obj.wait(deadlineMs - currentTimeMs);
-            }
-        }
-    }
-
 }

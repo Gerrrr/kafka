@@ -61,7 +61,7 @@ public class ProcessorNode<KIn, VIn, KOut, VOut> {
         this.children = new ArrayList<>();
         this.childByName = new HashMap<>();
         this.stateStores = stateStores;
-        this.time = Time.CACHED_MONOTONIC;
+        this.time = Time.getTime();
     }
 
     public ProcessorNode(final String name,

@@ -22,6 +22,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
+import org.apache.kafka.common.errors.TimeoutException;
 
 /**
  * An interface abstracting the clock to use in unit testing classes that make use of clock time.
@@ -34,13 +35,14 @@ public interface Time {
     Time CACHED_MONOTONIC = new CachedMonotonicTime(SYSTEM).startTimeTracking();
 
     static Time getTime() {
-        final String timeSource = System.getProperty("kafka.timesource");
+        final String timeSource = System.getProperty("kafka.timesource", "monotonic");
         switch (timeSource) {
             case "system":
                 return SYSTEM;
             case "monotonic":
-            default:
                 return CACHED_MONOTONIC;
+            default:
+                throw new IllegalArgumentException("Unknown time source: " + timeSource);
         }
     }
 
@@ -85,7 +87,21 @@ public interface Time {
      *
      * @throws org.apache.kafka.common.errors.TimeoutException if the timeout expires before the condition is satisfied
      */
-    void waitObject(Object obj, Supplier<Boolean> condition, long deadlineMs) throws InterruptedException;
+    default void waitObject(Object obj, Supplier<Boolean> condition, long deadlineMs) throws InterruptedException {
+        synchronized (obj) {
+            while (true) {
+                if (condition.get()) {
+                    return;
+                }
+
+                long currentTimeMs = milliseconds();
+                if (currentTimeMs >= deadlineMs)
+                    throw new TimeoutException("Condition not satisfied before deadline");
+
+                obj.wait(deadlineMs - currentTimeMs);
+            }
+        }
+    }
 
     /**
      * Get a timer which is bound to this time instance and expires after the given timeout

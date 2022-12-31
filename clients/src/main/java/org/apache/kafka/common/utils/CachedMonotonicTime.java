@@ -22,9 +22,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
 import java.util.logging.Logger;
-import org.apache.kafka.common.errors.TimeoutException;
 
 public class CachedMonotonicTime implements Time {
     private static final Logger LOG = Logger.getLogger(CachedMonotonicTime.class.getName());
@@ -101,24 +99,5 @@ public class CachedMonotonicTime implements Time {
     @Override
     public void sleep(final long ms) {
         Utils.sleep(ms);
-    }
-
-    @Override
-    public void waitObject(final Object obj, final Supplier<Boolean> condition,
-        final long deadlineMs)
-        throws InterruptedException {
-        synchronized (obj) {
-            while (true) {
-                if (condition.get()) {
-                    return;
-                }
-
-                long currentTimeMs = milliseconds();
-                if (currentTimeMs >= deadlineMs)
-                    throw new TimeoutException("Condition not satisfied before deadline");
-
-                obj.wait(deadlineMs - currentTimeMs);
-            }
-        }
     }
 }
