@@ -35,15 +35,16 @@ public interface Time {
     Time CACHED_MONOTONIC = new CachedMonotonicTime(SYSTEM).startTimeTracking();
 
     static Time getTime() {
-        final String timeSource = System.getProperty("kafka.timesource", "monotonic");
-        switch (timeSource) {
-            case "system":
-                return SYSTEM;
-            case "monotonic":
-                return CACHED_MONOTONIC;
-            default:
-                throw new IllegalArgumentException("Unknown time source: " + timeSource);
-        }
+//        final String timeSource = System.getProperty("kafka.timesource", "monotonic");
+//        switch (timeSource) {
+//            case "system":
+//                return SYSTEM;
+//            case "monotonic":
+//                return CACHED_MONOTONIC;
+//            default:
+//                throw new IllegalArgumentException("Unknown time source: " + timeSource);
+//        }
+        return CACHED_MONOTONIC;
     }
 
     /**
