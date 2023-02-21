@@ -20,13 +20,11 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
-import org.apache.kafka.common.errors.TimeoutException;
 
 /**
  * An interface abstracting the clock to use in unit testing classes that make use of clock time.
- *
+ * <p>
  * Implementations of this class should be thread-safe.
  */
 public interface Time {
@@ -97,7 +95,7 @@ public interface Time {
 
                 long currentTimeMs = milliseconds();
                 if (currentTimeMs >= deadlineMs)
-                    throw new TimeoutException("Condition not satisfied before deadline");
+                    throw new org.apache.kafka.common.errors.TimeoutException("Condition not satisfied before deadline");
 
                 obj.wait(deadlineMs - currentTimeMs);
             }
@@ -129,17 +127,17 @@ public interface Time {
     default <T> T waitForFuture(
         CompletableFuture<T> future,
         long deadlineNs
-    ) throws TimeoutException, InterruptedException, ExecutionException  {
-        TimeoutException timeoutException = null;
+    ) throws java.util.concurrent.TimeoutException, InterruptedException, ExecutionException  {
+        java.util.concurrent.TimeoutException timeoutException = null;
         while (true) {
             long nowNs = nanoseconds();
             if (deadlineNs <= nowNs) {
-                throw (timeoutException == null) ? new TimeoutException() : timeoutException;
+                throw (timeoutException == null) ? new java.util.concurrent.TimeoutException() : timeoutException;
             }
             long deltaNs = deadlineNs - nowNs;
             try {
                 return future.get(deltaNs, TimeUnit.NANOSECONDS);
-            } catch (TimeoutException t) {
+            } catch (java.util.concurrent.TimeoutException t) {
                 timeoutException = t;
             }
         }
